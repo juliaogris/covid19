@@ -12,9 +12,15 @@ Next steps:
 
 Setting up work with gcloud
 
-```
-cloud_sql_proxy -instances=covid19-sars-cov-2:us-central1:covid19=tcp:5432
-psql "host=127.0.0.1 port=5432 sslmode=disable dbname=covid19db user=postgres"
-```
+    cloud_sql_proxy -instances=covid19-sars-cov-2:us-central1:covid19=tcp:5432
+    psql "host=127.0.0.1 port=5432 sslmode=disable dbname=covid19db user=postgres"
+
+Local postgres DB:
+
+    make postgres
+
+and for the psql CLI
+
+    make psql
 
 Ask @juliaogris for db password if needed.

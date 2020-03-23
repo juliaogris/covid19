@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +14,28 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/html"
 )
+
+func TestScrape(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fpath := filepath.Join("testdata", "coronavirus-map-2020-03-22.html")
+		reader, err := os.Open(fpath)
+		require.NoError(t, err)
+		_, err = io.Copy(w, reader)
+		require.NoError(t, err)
+	}))
+	defer ts.Close()
+	data, err := scrape(ts.URL)
+	require.NoError(t, err)
+	require.Equal(t, 168, len(data.entries))
+	want := entry{
+		country:    "Worldwide",
+		cases:      303594,
+		cases1m:    43.09,
+		deaths:     94625,
+		recoveries: 12964,
+	}
+	require.Equal(t, want, data.entries[0])
+}
 
 func TestIsNode(t *testing.T) {
 	frag := `<div>hello</div>`
@@ -46,7 +71,7 @@ func TestProcessHTML(t *testing.T) {
 	want := entry{
 		country:    "Worldwide",
 		cases:      303594,
-		casesPer1M: 43.09,
+		cases1m:    43.09,
 		deaths:     94625,
 		recoveries: 12964,
 	}

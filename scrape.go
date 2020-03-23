@@ -136,9 +136,10 @@ func parseTr(tr *html.Node) (*entry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parseTr: cannot parse cases integer %w, %s", err, cells[0])
 	}
-	e.casesPer1M, err = strconv.ParseFloat(cells[1], 64)
+	f, err := strconv.ParseFloat(cells[1], 32)
+	e.cases1m = float32(f)
 	if err != nil {
-		return nil, fmt.Errorf("parseTr: cannot parse casesPer1M float %w, %s", err, cells[1])
+		return nil, fmt.Errorf("parseTr: cannot parse cases1m float %w, %s", err, cells[1])
 	}
 	e.deaths, err = strconv.Atoi(cells[2])
 	if err != nil {

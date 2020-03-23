@@ -14,6 +14,9 @@ import (
 )
 
 func TestMain(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping main test with DB dependency in short mode")
+	}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fpath := filepath.Join("testdata", "coronavirus-map-2020-03-22.html")
 		reader, err := os.Open(fpath)

@@ -10,8 +10,11 @@ import (
 )
 
 var (
-	sourceURL string    = "https://google.org/crisisresponse/covid19-map"
-	out       io.Writer = os.Stdout
+	sourceURL string = "https://google.org/crisisresponse/covid19-map"
+	dbConnStr string = "postgres://postgres:postgres@localhost:5432/?sslmode=disable"
+	// use with cloud_sql_proxy to write to google cloudSQL
+	//dbConnStr string    = "postgres://postgres:<PWD>@localhost:5432/covid19db?sslmode=disable"
+	out io.Writer = os.Stdout
 )
 
 type data struct {
@@ -22,7 +25,7 @@ type data struct {
 func (d *data) String() string {
 	s := make([]string, len(d.entries))
 	for i, e := range d.entries {
-		s[i] = fmt.Sprintf("%32s %8d %8.1f %8d %8d", e.country, e.cases, e.casesPer1M, e.deaths, e.recoveries)
+		s[i] = fmt.Sprintf("%32s %8d %8.1f %8d %8d", e.country, e.cases, e.cases1m, e.deaths, e.recoveries)
 	}
 	return strings.Join(s, "\n")
 }
@@ -30,15 +33,22 @@ func (d *data) String() string {
 type entry struct {
 	country    string
 	cases      int
-	casesPer1M float64
+	cases1m    float32
 	deaths     int
 	recoveries int
 }
 
-func main() {
-	data, err := scrape(sourceURL)
+func makeSnapshot(url string, connStr string) error {
+	data, err := scrape(url)
 	if err != nil {
-		log.Fatal(err)
+		return (err)
 	}
 	fmt.Fprintln(out, data)
+	return writeData(connStr, data)
+}
+
+func main() {
+	if err := makeSnapshot(sourceURL, dbConnStr); err != nil {
+		log.Fatal(err)
+	}
 }

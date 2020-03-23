@@ -29,10 +29,13 @@ lint:  ## lint the source code
 
 # -- Test ----------------------------------------------------------------------
 COVERFILE = coverage.out
-COVERAGE = 98
+COVERAGE = 75
 
 test:  ## Run tests and generate a coverage file
-	go test -coverprofile=$(COVERFILE) ./...
+	go test -coverprofile=$(COVERFILE) -short ./...
+
+test-all: ## Run all tests, including some against DB
+	go test ./...
 
 check-coverage: test  ## Check that test coverage meets the required level
 	@go tool cover -func=$(COVERFILE) | $(CHECK_COVERAGE) || $(FAIL_COVERAGE)
@@ -47,6 +50,16 @@ CHECK_COVERAGE = awk -F '[ \t%]+' '/^total:/ && $$3 < $(COVERAGE) {exit 1}'
 FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_NORMAL)'; exit 1; }
 
 .PHONY: test check-coverage cover
+
+# -- DB ------------------------------------------------------------------------
+
+postgres:
+	docker run --rm --name postgres -e POSTGRES_PASSWORD=postgres -p5432:5432 postgres:11.7
+
+psql:
+	docker exec -it postgres psql -U postgres
+
+.PHONY: postgres psql
 
 # --- Utilities ---------------------------------------------------------------
 
