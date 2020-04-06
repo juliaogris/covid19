@@ -4,227 +4,226 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/juliaogris/covid19/htmlx"
 	"golang.org/x/net/html"
 )
 
-func scrape(url string) (*data, error) {
-	resp, err := http.Get(url)
+type TableScraper struct {
+	URL         string
+	CSSSelector string
+
+	ColumnDefs []ColumnDef
+
+	HeaderRowIndex int
+	HeaderColNames []string
+	HeaderRowCount int
+	FooterRowCount int
+
+	TargetTableName string
+	TargetColNames  []string // must match ColumnDefs[i].TargetName; for rearranging
+}
+
+type ColumnDef struct {
+	Skip bool
+
+	TargetName   string
+	Type         reflect.Kind
+	ZeroValue    string // e.g. "-" for numbers
+	TruncateFrom string // e.g. "[" to remove reference in wikipedia "[a]"
+}
+
+func (t *TableScraper) Scrape() (*Table, error) {
+	if err := ValidateTableScraper(t); err != nil {
+		return nil, err
+	}
+	resp, err := http.Get(t.URL)
 	if err != nil {
 		return nil, err
 	}
-	defer closeIgnoreErr(resp.Body)
-	return processHTML(resp.Body)
+	defer resp.Body.Close()
+	return t.scrapeFromReader(resp.Body)
 }
 
-func processHTML(r io.Reader) (*data, error) {
-	doc, err := html.Parse(r)
-	if err != nil {
-		return nil, err
+func ValidateTableScraper(t *TableScraper) error {
+	if _, err := url.Parse(t.URL); err != nil {
+		return err
 	}
-
-	tbody, err := findTbody(doc)
-	if err != nil {
-		return nil, err
-	}
-
-	return parseTrs(tbody)
-}
-
-func findTbody(n *html.Node) (*html.Node, error) {
-	if isNode(n, "div", "table_container") {
-		return unwrapTbody(n)
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		n, err := findTbody(c)
-		if err != nil {
-			return nil, err
+	if len(t.HeaderColNames) > 0 {
+		if t.HeaderRowIndex >= t.HeaderRowCount {
+			return fmt.Errorf("header row index outside header row count")
 		}
-		if n != nil {
-			return n, nil
-		}
-	}
-	return nil, nil
-}
-
-func unwrapTbody(div *html.Node) (*html.Node, error) {
-	div2 := firstChild(div, "div")
-	table := firstChild(div2, "table")
-	if table == nil {
-		return nil, fmt.Errorf(`unwrapTbody: expected <table>, got nil in %#v`, div2)
-	}
-	thead := firstChild(table, "thead")
-	if err := validateThead(thead); err != nil {
-		return nil, err
-	}
-	return next(thead, "tbody"), nil
-}
-
-func validateThead(thead *html.Node) error {
-	if !isNode(thead, "thead", "") {
-		return fmt.Errorf(`validateThead: expected <thead>, got %#v`, thead)
-	}
-	tr := firstChild(thead, "tr")
-	if tr == nil {
-		return fmt.Errorf(`validateThead: expected <tr>, got nil in %#v`, thead)
-	}
-	thTexts := []string{"Location", "Confirmed cases", "Cases per 1M people", "Recovered", "Deaths"}
-	th := firstChild(tr, "th")
-
-	for _, tt := range thTexts {
-		if !isNode(th, "th", "") {
-			return fmt.Errorf(`validateThead: expected <th>, got %#v`, tr)
-		}
-		tn := th.FirstChild
-		if tn == nil || tn.Type != html.TextNode {
-			return fmt.Errorf(`validateThead: expected <th> child to be TextNode, got %#v`, tn)
-		}
-		if tn.Data != tt {
-			return fmt.Errorf(`validateThead: expected TextNode %s, got %s`, tt, tn.Data)
-		}
-		th = next(th, "th")
 	}
 	return nil
 }
 
-func parseTrs(tbody *html.Node) (*data, error) {
-	if tbody == nil {
-		return nil, fmt.Errorf("parseTrs: tbody is nil")
+func (t *TableScraper) scrapeFromReader(r io.Reader) (*Table, error) {
+	node, err := html.Parse(r)
+	if err != nil {
+		return nil, err
 	}
-	d := data{
-		date:    time.Now(),
-		entries: []entry{},
+	tableContainer, err := htmlx.QuerySelector(node, t.CSSSelector)
+	if err != nil {
+		return nil, err
 	}
-	for tr := firstChild(tbody, "tr"); tr != nil; tr = next(tr, "tr") {
-		entry, err := parseTr(tr)
-		if err != nil {
+	rows := getRows(tableContainer)
+	if len(rows) < t.HeaderRowCount+t.FooterRowCount {
+		return nil, fmt.Errorf("expected at least %d rows, got %d", t.HeaderRowCount+t.FooterRowCount, len(rows))
+	}
+	if err := vaildateTableHeader(rows, t.HeaderColNames, t.HeaderRowIndex); err != nil {
+		return nil, err
+	}
+	bodyRows := rows[t.HeaderRowCount : len(rows)-t.FooterRowCount]
+	table, err := parseTableBody(bodyRows, t.ColumnDefs)
+	if err != nil {
+		return nil, err
+	}
+	table.Name = t.TargetTableName
+	if len(t.TargetColNames) != 0 {
+		if err := table.RearrangeColumns(t.TargetColNames); err != nil {
 			return nil, err
 		}
-		d.entries = append(d.entries, *entry)
 	}
-	return &d, nil
+	return table, nil
 }
 
-func parseTr(tr *html.Node) (*entry, error) {
-	e := entry{}
+func getRows(table *html.Node) [][]string {
+	trs := htmlx.QueryAllNoChildren(table, &htmlx.Selector{Tag: "tr"})
+	rows := make([][]string, len(trs))
+	for i, tr := range trs {
+		rows[i] = getRow(tr)
+	}
+	return rows
+}
+
+func getRow(tr *html.Node) []string {
+	th := htmlx.QueryAllNoChildren(tr, &htmlx.Selector{Tag: "th"})
+	td := htmlx.QueryAllNoChildren(tr, &htmlx.Selector{Tag: "td"})
+	cells := append(th, td...)
+	row := make([]string, len(cells))
+	for i, cell := range cells {
+		row[i] = strings.TrimSpace(getText(cell))
+	}
+	return row
+}
+
+func vaildateTableHeader(rows [][]string, colNames []string, rowIndex int) error {
+	if len(colNames) == 0 {
+		return nil
+	}
+	cells := rows[rowIndex]
+	if len(cells) != len(colNames) {
+		return fmt.Errorf("expected %d columns, got %d", len(colNames), len(cells))
+	}
+	for i, colName := range colNames {
+		s := strings.ToLower(strings.TrimSpace(cells[i]))
+		if !strings.Contains(s, strings.ToLower(colName)) {
+			return fmt.Errorf("expected header '%s' to contain '%s'", s, colName)
+		}
+	}
+	return nil
+}
+
+func parseTableBody(rows [][]string, colDefs []ColumnDef) (*Table, error) {
+	cells := make([][]interface{}, len(rows))
+	targetColCnt := getTargetColCnt(colDefs)
 	var err error
-	countryTd := firstChild(tr, "td")
-	e.country, err = getCountry(countryTd)
-	if err != nil {
-		return nil, err
-	}
-	var cells []string
-	for td := next(countryTd, "td"); td != nil; td = next(td, "td") {
-		text, err := getText(td)
+	for i, row := range rows {
+		cells[i], err = parseRow(row, colDefs, targetColCnt)
 		if err != nil {
 			return nil, err
 		}
-		text = strings.Trim(text, " \n\t")
-		text = strings.ReplaceAll(text, ",", "") // strip "," in numbers
-		if text == "-" || text == "—" {
-			text = "0"
-		}
-		cells = append(cells, text)
 	}
-	if len(cells) < 4 {
-		return nil, fmt.Errorf("parseTr: table row has %d cells, expected >=4", len(cells)+1)
-	}
-	e.cases, err = strconv.Atoi(cells[0])
-	if err != nil {
-		return nil, fmt.Errorf("parseTr: cannot parse cases integer %w, %s", err, cells[0])
-	}
-	f, err := strconv.ParseFloat(cells[1], 32)
-	e.cases1m = float32(f)
-	if err != nil {
-		return nil, fmt.Errorf("parseTr: cannot parse cases1m float %w, %s", err, cells[1])
-	}
-	e.deaths, err = strconv.Atoi(cells[2])
-	if err != nil {
-		return nil, fmt.Errorf("parseTr: cannot parse deaths integer %w, '%s'", err, cells[2])
-	}
-	e.recoveries, err = strconv.Atoi(cells[3])
-	if err != nil {
-		return nil, fmt.Errorf("parseTr: cannot parse recoveries integer %w, %s", err, cells[3])
-	}
-	return &e, nil
+	columns := getTargetColumns(colDefs)
+	return &Table{Columns: columns, Cells: cells}, nil
 }
 
-func getCountry(td *html.Node) (string, error) {
-	if !isNode(td, "td", "") {
-		return "", fmt.Errorf(`getCountry: expected <td>, got %#v`, td)
-	}
-	span := firstChild(td, "span")
-	if !isNode(span, "span", "") {
-		return "", fmt.Errorf(`getCountry: expected <span>, got %#v`, span)
-	}
-	if span.FirstChild == nil || span.FirstChild.Type != html.TextNode {
-		return "", fmt.Errorf(`getCountry: expected 1 text child for <span>, got %#v`, span.FirstChild)
-	}
-	return span.FirstChild.Data, nil
-}
-
-func getText(td *html.Node) (string, error) {
-	if !isNode(td, "td", "") {
-		return "", fmt.Errorf(`getText: expected <td>, got %#v`, td)
-	}
-	if td.FirstChild == nil || td.FirstChild.Type != html.TextNode {
-		return "", fmt.Errorf(`getText: expected 1 text child for <td>, got %#v`, td.FirstChild)
-	}
-	return td.FirstChild.Data, nil
-}
-
-func isNode(n *html.Node, tag, class string) bool {
-	if n == nil {
-		return false
-	}
-	if n.Type != html.ElementNode {
-		return false
-	}
-	if n.Data != tag {
-		return false
-	}
-	return hasClassAttr(n.Attr, class)
-}
-
-func firstChild(n *html.Node, tag string) *html.Node {
-	if n == nil || n.FirstChild == nil {
-		return nil
-	}
-	c := n.FirstChild
-	if c.Type == html.ElementNode && c.Data == tag {
-		return c
-	}
-	return next(c, tag)
-}
-
-func next(n *html.Node, tag string) *html.Node {
-	if n == nil {
-		return nil
-	}
-
-	for n := n.NextSibling; n != nil; n = n.NextSibling {
-		if n.Type == html.ElementNode && n.Data == tag {
-			return n
+func getTargetColCnt(colDefs []ColumnDef) int {
+	result := len(colDefs)
+	for _, colDef := range colDefs {
+		if colDef.Skip {
+			result--
 		}
 	}
-	return nil
+	return result
 }
 
-func hasClassAttr(attr []html.Attribute, class string) bool {
-	if class == "" {
-		return true
-	}
-	for _, a := range attr {
-		if a.Key == "class" {
-			return strings.Contains(a.Val, class)
+func getTargetColumns(colDefs []ColumnDef) []Column {
+	cols := []Column{}
+	for _, colDef := range colDefs {
+		if !colDef.Skip {
+			col := Column{Name: colDef.TargetName, Type: colDef.Type}
+			cols = append(cols, col)
 		}
 	}
-	return false
+	return cols
 }
 
-func closeIgnoreErr(c io.Closer) {
-	_ = c.Close()
+func parseRow(row []string, colDefs []ColumnDef, targetColCnt int) ([]interface{}, error) {
+	if len(row) != len(colDefs) {
+		return nil, fmt.Errorf("expected %d data cells, got %d (%#v)", len(colDefs), len(row), row)
+	}
+	var err error
+	result := make([]interface{}, targetColCnt)
+	j := 0
+	for i, colDef := range colDefs {
+		if colDef.Skip {
+			continue
+		}
+		result[j], err = parseCell(row[i], colDef)
+		if err != nil {
+			return nil, err
+		}
+		j++
+	}
+	return result, nil
+}
+
+func parseCell(c string, colDef ColumnDef) (interface{}, error) {
+	if colDef.TruncateFrom != "" {
+		if i := strings.Index(c, colDef.TruncateFrom); i != -1 {
+			c = c[:i]
+		}
+	}
+	if c == colDef.ZeroValue {
+		return zero(colDef.Type)
+	}
+	switch colDef.Type {
+	case reflect.String:
+		return c, nil
+	case reflect.Int, reflect.Int64:
+		c = strings.ReplaceAll(c, ",", "")
+		return strconv.Atoi(c)
+	case reflect.Float64:
+		c = strings.ReplaceAll(c, ",", "")
+		return strconv.ParseFloat(c, 64)
+	}
+	return nil, fmt.Errorf("unknown column type %s", colDef.Type)
+}
+
+func zero(k reflect.Kind) (interface{}, error) {
+	switch k {
+	case reflect.String:
+		return "", nil
+	case reflect.Int, reflect.Int64:
+		return 0, nil
+	case reflect.Float64:
+		return 0.0, nil
+	}
+	return nil, fmt.Errorf("unknown kind %s", k)
+}
+
+func getText(n *html.Node) string {
+	if n.Type == html.TextNode {
+		return strings.Trim(n.Data, "\n")
+	}
+	var sb strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		sb.WriteString(getText(c))
+	}
+	return sb.String()
 }

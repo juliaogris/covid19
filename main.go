@@ -5,50 +5,44 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
-	"time"
+	"reflect"
 )
 
 var (
-	sourceURL string = "https://google.org/crisisresponse/covid19-map"
-	dbConnStr string = "postgres://postgres:postgres@localhost:5432/?sslmode=disable"
+	dbConnStr string = "postgres://postgres:postgres@localhost:5555/?sslmode=disable"
 	// use with cloud_sql_proxy to write to google cloudSQL
-	//dbConnStr string    = "postgres://postgres:<PWD>@localhost:5432/covid19db?sslmode=disable"
-	out io.Writer = os.Stdout
+	// dbConnStr string    = "postgres://postgres:<PASSWORD>@localhost:5432/covid19db?sslmode=disable"
+	out       io.Writer = os.Stdout
+	scrapeURL           = "https://en.wikipedia.org/wiki/2019%E2%80%9320_coronavirus_pandemic_by_country_and_territory"
 )
 
-type data struct {
-	date    time.Time
-	entries []entry
-}
-
-func (d *data) String() string {
-	s := make([]string, len(d.entries))
-	for i, e := range d.entries {
-		s[i] = fmt.Sprintf("%32s %8d %8.1f %8d %8d", e.country, e.cases, e.cases1m, e.deaths, e.recoveries)
+func newWikiCovid19Scraper() *TableScraper {
+	return &TableScraper{
+		URL:         scrapeURL,
+		CSSSelector: "div#covid19-container table.wikitable",
+		ColumnDefs: []ColumnDef{
+			{Skip: true},
+			{TargetName: "country", Type: reflect.String, TruncateFrom: "["},
+			{TargetName: "cases", Type: reflect.Int, ZeroValue: "–"},
+			{TargetName: "deaths", Type: reflect.Int, ZeroValue: "–"},
+			{TargetName: "recoveries", Type: reflect.Int, ZeroValue: "–"},
+			{Skip: true},
+		},
+		HeaderRowIndex:  0,
+		HeaderColNames:  []string{"countries", "cases", "deaths", "recov", "ref"},
+		HeaderRowCount:  2,
+		FooterRowCount:  2,
+		TargetTableName: "entries",
 	}
-	return strings.Join(s, "\n")
-}
-
-type entry struct {
-	country    string
-	cases      int
-	cases1m    float32
-	deaths     int
-	recoveries int
-}
-
-func makeSnapshot(url string, connStr string) error {
-	data, err := scrape(url)
-	if err != nil {
-		return (err)
-	}
-	fmt.Fprintln(out, data)
-	return writeData(connStr, data)
 }
 
 func main() {
-	if err := makeSnapshot(sourceURL, dbConnStr); err != nil {
+	table, err := newWikiCovid19Scraper().Scrape()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintln(out, table)
+	if err := persistTable(dbConnStr, table); err != nil {
 		log.Fatal(err)
 	}
 }

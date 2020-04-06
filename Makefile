@@ -9,16 +9,19 @@ clean::  ## Remove generated files
 # Get the first directory in GOPATH
 GOPATH1 = $(firstword $(subst :, ,$(GOPATH)))
 
-# -- Build ---------------------------------------------------------------------
+# -- Build and run -------------------------------------------------------------
 
 BINARY = covid19-scraper
 build:  ## Build covid19-scraper
 	go build -o $(BINARY) .
 
+run: build  ## Build and run covid19-scraper
+	./$(BINARY)
+
 clean::
 	rm -f $(BINARY)
 
-.PHONY: build
+.PHONY: build run
 
 # -- Lint ----------------------------------------------------------------------
 
@@ -29,7 +32,7 @@ lint:  ## lint the source code
 
 # -- Test ----------------------------------------------------------------------
 COVERFILE = coverage.out
-COVERAGE = 75
+COVERAGE = 43
 
 test:  ## Run tests and generate a coverage file
 	go test -coverprofile=$(COVERFILE) -short ./...
@@ -46,7 +49,7 @@ cover: test  ## Show test coverage in your browser
 clean::
 	rm -f $(COVERFILE)
 
-CHECK_COVERAGE = awk -F '[ \t%]+' '/^total:/ && $$3 < $(COVERAGE) {exit 1}'
+CHECK_COVERAGE = awk -F '[ \t%]+' '/^total:/ {print; if ($$3 < $(COVERAGE)) exit 1}'
 FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_NORMAL)'; exit 1; }
 
 .PHONY: test check-coverage cover
@@ -54,7 +57,7 @@ FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_
 # -- DB ------------------------------------------------------------------------
 
 postgres:
-	docker run --rm --name postgres -e POSTGRES_PASSWORD=postgres -p5432:5432 postgres:11.7
+	docker run --rm --name postgres -e POSTGRES_PASSWORD=postgres -p5555:5432 postgres:11.7
 
 psql:
 	docker exec -it postgres psql -U postgres
