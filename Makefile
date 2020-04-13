@@ -9,13 +9,12 @@ clean::  ## Remove generated files
 # Get the first directory in GOPATH
 GOPATH1 = $(firstword $(subst :, ,$(GOPATH)))
 
+
 # -- Build and run -------------------------------------------------------------
 
 BINARY = covid19-scraper
-#	dbConnStr string    = "postgres://postgres@localhost:5432/covid19db?sslmode=disable"
-# $(PGPASSWORD
 build:  ## Build covid19-scraper
-	go build -o $(BINARY) .
+	go build -o $(BINARY) ./cmd/$(BINARY)
 
 run: build check-pg-password  ## Build and run covid19-scraper with gcloud database, see make gcloud-proxy
 	./$(BINARY) --conn="postgres://postgres@localhost:5555/covid19db?sslmode=disable"
@@ -28,6 +27,7 @@ clean::
 
 .PHONY: build run run-local
 
+
 # -- Lint ----------------------------------------------------------------------
 
 lint:  ## lint the source code
@@ -35,7 +35,9 @@ lint:  ## lint the source code
 
 .PHONY: lint
 
+
 # -- Test ----------------------------------------------------------------------
+
 COVERFILE = coverage.out
 COVERAGE = 43
 

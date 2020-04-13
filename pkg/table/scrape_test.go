@@ -1,4 +1,4 @@
-package main
+package table
 
 import (
 	"os"
@@ -14,8 +14,8 @@ const mapFile = "coronavirus-map-2020-03-22.html"
 
 var wikiZeroValues = []string{"-", "—", "–"}
 
-func wikiTableScraper() *TableScraper {
-	return &TableScraper{
+func wikiScraper() *Scraper {
+	return &Scraper{
 		URL:         "https://en.wikipedia.org/wiki/2019%E2%80%9320_coronavirus_pandemic_by_country_and_territory",
 		CSSSelector: "div#covid19-container table.wikitable",
 		ColumnDefs: []ColumnDef{
@@ -34,8 +34,8 @@ func wikiTableScraper() *TableScraper {
 	}
 }
 
-func mapTableScraper() *TableScraper {
-	return &TableScraper{
+func mapScraper() *Scraper {
+	return &Scraper{
 		URL:         "https://google.com/covid19-map",
 		CSSSelector: "div.table_container div.table_scroll.table_height table",
 		ColumnDefs: []ColumnDef{
@@ -54,29 +54,29 @@ func mapTableScraper() *TableScraper {
 }
 
 func TestScrapeTable(t *testing.T) {
-	tableScraper := wikiTableScraper()
-	require.NoError(t, ValidateTableScraper(tableScraper))
+	scraper := wikiScraper()
+	require.NoError(t, ValidateScraper(scraper))
 
-	rearrangedWikiScraper := wikiTableScraper()
+	rearrangedWikiScraper := wikiScraper()
 	rearrangedWikiScraper.TargetColNames = []string{"deaths", "country", "cases", "recoveries"}
 
 	tests := map[string]struct {
 		inputFile    string
-		scraper      *TableScraper
+		scraper      *Scraper
 		wantRowCnt   int
 		wantColNames []string
 		wantCells0   []interface{}
 	}{
 		"wiki": {
 			inputFile:    wikiFile,
-			scraper:      wikiTableScraper(),
+			scraper:      wikiScraper(),
 			wantRowCnt:   223,
 			wantColNames: []string{"country", "cases", "deaths", "recoveries"},
 			wantCells0:   []interface{}{"United States", 311616, 8489, 14943},
 		},
 		"map": {
 			inputFile:    mapFile,
-			scraper:      mapTableScraper(),
+			scraper:      mapScraper(),
 			wantRowCnt:   168,
 			wantColNames: []string{"country", "cases", "cases1m", "recovered", "deaths"},
 			wantCells0:   []interface{}{"Worldwide", 303594, 43.09, 94625, 12964},

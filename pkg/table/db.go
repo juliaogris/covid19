@@ -1,4 +1,4 @@
-package main
+package table
 
 import (
 	"database/sql"
@@ -11,7 +11,7 @@ import (
 	"github.com/lib/pq"
 )
 
-func persistTable(connStr string, t *Table) error {
+func Persist(connStr string, t *Table) error {
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return err

@@ -24,7 +24,7 @@ func TestMain(t *testing.T) {
 		require.NoError(t, err)
 	}))
 	defer ts.Close()
-	*scrapeURL = ts.URL
+	scrapeURL = ts.URL
 	*conn = "postgres://postgres:postgres@localhost:5432/?sslmode=disable"
 
 	stdout := os.Stdout

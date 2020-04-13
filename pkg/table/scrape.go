@@ -1,4 +1,4 @@
-package main
+package table
 
 import (
 	"fmt"
@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/juliaogris/covid19/htmlx"
+	"github.com/juliaogris/covid19/pkg/htmlx"
 	"golang.org/x/net/html"
 )
 
-type TableScraper struct {
+type Scraper struct {
 	URL         string
 	CSSSelector string
 
@@ -38,54 +38,54 @@ type ColumnDef struct { //nolint:maligned
 	NoTrim       bool     // don't trim whitespace
 }
 
-func (t *TableScraper) Scrape() (*Table, error) {
-	if err := ValidateTableScraper(t); err != nil {
+func (s *Scraper) Scrape() (*Table, error) {
+	if err := ValidateScraper(s); err != nil {
 		return nil, err
 	}
-	resp, err := http.Get(t.URL)
+	resp, err := http.Get(s.URL)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return t.scrapeFromReader(resp.Body)
+	return s.scrapeFromReader(resp.Body)
 }
 
-func ValidateTableScraper(t *TableScraper) error {
-	if _, err := url.Parse(t.URL); err != nil {
+func ValidateScraper(s *Scraper) error {
+	if _, err := url.Parse(s.URL); err != nil {
 		return err
 	}
-	if len(t.HeaderColNames) > 0 {
-		if t.HeaderRowIndex >= t.HeaderRowCount {
+	if len(s.HeaderColNames) > 0 {
+		if s.HeaderRowIndex >= s.HeaderRowCount {
 			return fmt.Errorf("header row index outside header row count")
 		}
 	}
 	return nil
 }
 
-func (t *TableScraper) scrapeFromReader(r io.Reader) (*Table, error) {
+func (s *Scraper) scrapeFromReader(r io.Reader) (*Table, error) {
 	node, err := html.Parse(r)
 	if err != nil {
 		return nil, err
 	}
-	tableContainer, err := htmlx.QuerySelector(node, t.CSSSelector)
+	tableContainer, err := htmlx.QuerySelector(node, s.CSSSelector)
 	if err != nil {
 		return nil, err
 	}
 	rows := getRows(tableContainer)
-	if len(rows) < t.HeaderRowCount+t.FooterRowCount {
-		return nil, fmt.Errorf("expected at least %d rows, got %d", t.HeaderRowCount+t.FooterRowCount, len(rows))
+	if len(rows) < s.HeaderRowCount+s.FooterRowCount {
+		return nil, fmt.Errorf("expected at least %d rows, got %d", s.HeaderRowCount+s.FooterRowCount, len(rows))
 	}
-	if err := vaildateTableHeader(rows, t.HeaderColNames, t.HeaderRowIndex); err != nil {
+	if err := vaildateTableHeader(rows, s.HeaderColNames, s.HeaderRowIndex); err != nil {
 		return nil, err
 	}
-	bodyRows := rows[t.HeaderRowCount : len(rows)-t.FooterRowCount]
-	table, err := parseTableBody(bodyRows, t.ColumnDefs)
+	bodyRows := rows[s.HeaderRowCount : len(rows)-s.FooterRowCount]
+	table, err := parseTableBody(bodyRows, s.ColumnDefs)
 	if err != nil {
 		return nil, err
 	}
-	table.Name = t.TargetTableName
-	if len(t.TargetColNames) != 0 {
-		if err := table.RearrangeColumns(t.TargetColNames); err != nil {
+	table.Name = s.TargetTableName
+	if len(s.TargetColNames) != 0 {
+		if err := table.RearrangeColumns(s.TargetColNames); err != nil {
 			return nil, err
 		}
 	}
