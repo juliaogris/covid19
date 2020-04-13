@@ -33,8 +33,9 @@ type ColumnDef struct {
 
 	TargetName   string
 	Type         reflect.Kind
-	ZeroValue    string // e.g. "-" for numbers
-	TruncateFrom string // e.g. "[" to remove reference in wikipedia "[a]"
+	ZeroValues   []string // e.g. "-" for numbers
+	TruncateFrom string   // e.g. "[" to remove reference in wikipedia "[a]"
+	NoTrim       bool     // don't trim whitespace
 }
 
 func (t *TableScraper) Scrape() (*Table, error) {
@@ -189,7 +190,10 @@ func parseCell(c string, colDef ColumnDef) (interface{}, error) {
 			c = c[:i]
 		}
 	}
-	if c == colDef.ZeroValue {
+	if !colDef.NoTrim {
+		c = strings.TrimSpace(c)
+	}
+	if contains(colDef.ZeroValues, c) {
 		return zero(colDef.Type)
 	}
 	switch colDef.Type {
@@ -226,4 +230,13 @@ func getText(n *html.Node) string {
 		sb.WriteString(getText(c))
 	}
 	return sb.String()
+}
+
+func contains(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }

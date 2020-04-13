@@ -12,6 +12,8 @@ import (
 const wikiFile = "wikipedia_2020-04-05.htm"
 const mapFile = "coronavirus-map-2020-03-22.html"
 
+var wikiZeroValues = []string{"-", "—", "–"}
+
 func wikiTableScraper() *TableScraper {
 	return &TableScraper{
 		URL:         "https://en.wikipedia.org/wiki/2019%E2%80%9320_coronavirus_pandemic_by_country_and_territory",
@@ -19,9 +21,9 @@ func wikiTableScraper() *TableScraper {
 		ColumnDefs: []ColumnDef{
 			{Skip: true},
 			{TargetName: "country", Type: reflect.String, TruncateFrom: "["},
-			{TargetName: "cases", Type: reflect.Int, ZeroValue: "–"},
-			{TargetName: "deaths", Type: reflect.Int, ZeroValue: "–"},
-			{TargetName: "recoveries", Type: reflect.Int, ZeroValue: "–"},
+			{TargetName: "cases", Type: reflect.Int, ZeroValues: wikiZeroValues},
+			{TargetName: "deaths", Type: reflect.Int, ZeroValues: wikiZeroValues},
+			{TargetName: "recoveries", Type: reflect.Int, ZeroValues: wikiZeroValues},
 			{Skip: true},
 		},
 		HeaderRowIndex:  0,
@@ -38,10 +40,10 @@ func mapTableScraper() *TableScraper {
 		CSSSelector: "div.table_container div.table_scroll.table_height table",
 		ColumnDefs: []ColumnDef{
 			{TargetName: "country", Type: reflect.String},
-			{TargetName: "cases", Type: reflect.Int, ZeroValue: "—"},
-			{TargetName: "cases1m", Type: reflect.Float64, ZeroValue: "—"},
-			{TargetName: "recovered", Type: reflect.Int, ZeroValue: "—"},
-			{TargetName: "deaths", Type: reflect.Int, ZeroValue: "—"},
+			{TargetName: "cases", Type: reflect.Int, ZeroValues: wikiZeroValues},
+			{TargetName: "cases1m", Type: reflect.Float64, ZeroValues: wikiZeroValues},
+			{TargetName: "recovered", Type: reflect.Int, ZeroValues: wikiZeroValues},
+			{TargetName: "deaths", Type: reflect.Int, ZeroValues: wikiZeroValues},
 		},
 		HeaderRowIndex:  0,
 		HeaderColNames:  []string{"Location", "Confirmed cases", "Cases per 1M people", "Recovered", "Deaths"},
