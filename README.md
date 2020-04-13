@@ -1,26 +1,30 @@
 # Covid19 data scraper
 
-Scrapes data from https://google.org/crisisresponse/covid19-map and prints it.
+Scrapes data from Wikipedia's [coronavirus pandemic by country and territory](https://en.wikipedia.org/wiki/2019%E2%80%9320_coronavirus_pandemic_by_country_and_territory) and write it to database.
 
-Next steps:
+Pre-requites
 
--   dump data into Google Cloud SQL
--   run in cloudfunction as Chron job
--   scrape data from Wikipedia source
--   scrape country population stats
--   scrape country hospital / ICU stats
+    - go 1.14
+    - gnu make
+    - docker
 
-Setting up work with gcloud
-
-    cloud_sql_proxy -instances=covid19-sars-cov-2:us-central1:covid19=tcp:5432
-    psql "host=127.0.0.1 port=5432 sslmode=disable dbname=covid19db user=postgres"
-
-Local postgres DB:
+Run local DB with
 
     make postgres
 
-and for the psql CLI
+and in other terminal run scraper and check results with
 
+    make run-local
     make psql
 
+Write data to cloud and check results with
+
+    gcloud-proxy
+    make run
+    gcloud-psql
+
 Ask @juliaogris for db password if needed.
+
+Find further options with
+
+    make help

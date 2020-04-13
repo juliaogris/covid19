@@ -28,7 +28,7 @@ type TableScraper struct {
 	TargetColNames  []string // must match ColumnDefs[i].TargetName; for rearranging
 }
 
-type ColumnDef struct {
+type ColumnDef struct { //nolint:maligned
 	Skip bool
 
 	TargetName   string

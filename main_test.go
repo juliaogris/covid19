@@ -1,13 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,17 +24,18 @@ func TestMain(t *testing.T) {
 		require.NoError(t, err)
 	}))
 	defer ts.Close()
-	scrapeURL = ts.URL
-	buffer := bytes.Buffer{}
-	out = &buffer
+	*scrapeURL = ts.URL
+	*conn = "postgres://postgres:postgres@localhost:5432/?sslmode=disable"
+
+	stdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
 	main()
 
-	lines := strings.Split(buffer.String(), "\n")
-	require.Equal(t, 225, len(lines))
-	wantLine0 := `                     country  cases deaths recoveries`
-	wantLine1 := `               United States 311616   8489      14943`
-	wantLineN := `            Papua New Guinea      1      0          0`
-	require.Equal(t, wantLine0, lines[0])
-	require.Equal(t, wantLine1, lines[1])
-	require.Equal(t, wantLineN, lines[len(lines)-2])
+	os.Stdout = stdout
+	w.Close()
+	out, _ := ioutil.ReadAll(r)
+
+	require.Equal(t, "Successfully added 223 rows.\n", string(out))
 }

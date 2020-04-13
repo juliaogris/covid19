@@ -12,16 +12,21 @@ GOPATH1 = $(firstword $(subst :, ,$(GOPATH)))
 # -- Build and run -------------------------------------------------------------
 
 BINARY = covid19-scraper
+#	dbConnStr string    = "postgres://postgres@localhost:5432/covid19db?sslmode=disable"
+# $(PGPASSWORD
 build:  ## Build covid19-scraper
 	go build -o $(BINARY) .
 
-run: build  ## Build and run covid19-scraper
-	./$(BINARY)
+run: build check-pg-password  ## Build and run covid19-scraper with gcloud database, see make gcloud-proxy
+	./$(BINARY) --conn="postgres://postgres@localhost:5555/covid19db?sslmode=disable"
+
+run-local: build  ## Build and run covid19-scraper with local database
+	./$(BINARY) --conn="postgres://postgres:postgres@localhost:5432/?sslmode=disable"
 
 clean::
 	rm -f $(BINARY)
 
-.PHONY: build run
+.PHONY: build run run-local
 
 # -- Lint ----------------------------------------------------------------------
 
@@ -56,13 +61,27 @@ FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_
 
 # -- DB ------------------------------------------------------------------------
 
-postgres:
-	docker run --rm --name postgres -e POSTGRES_PASSWORD=postgres -p5555:5432 postgres:11.7
+GCLOUD_PORT = 5555
 
-psql:
+postgres:  ## Start Postgres docker container on port 5432
+	docker run --rm --name postgres -e POSTGRES_PASSWORD=postgres -p5432:5432 postgres:11.7
+
+psql:  ## Connect to local postgres docker container
 	docker exec -it postgres psql -U postgres
 
-.PHONY: postgres psql
+gcloud-proxy: ## Start Google cloud proxy connected to google cloud database
+	cloud_sql_proxy -instances=covid19-sars-cov-2:us-central1:covid19=tcp:$(GCLOUD_PORT)
+
+gcloud-psql:  check-pg-password ## Connect to gcloud postgres database via gcloud-proxy
+	docker exec -it -e PGPASSWORD=$(PGPASSWORD) postgres psql \
+		-h docker.for.mac.localhost -U postgres -d covid19db -p $(GCLOUD_PORT)
+
+check-pg-password:
+ifeq ($(PGPASSWORD),)
+	$(error PGPASSWORD environement varaible not set)
+endif
+
+.PHONY: check-pg-password gcloud-proxy gcloud-psql postgres psql
 
 # --- Utilities ---------------------------------------------------------------
 
