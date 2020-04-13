@@ -6,29 +6,24 @@ clean::  ## Remove generated files
 
 .PHONY: all clean
 
-# Get the first directory in GOPATH
-GOPATH1 = $(firstword $(subst :, ,$(GOPATH)))
 
-
-# -- Build and run -------------------------------------------------------------
+# --- Build and run
 
 BINARY = covid19-scraper
+
 build:  ## Build covid19-scraper
 	go build -o $(BINARY) ./cmd/$(BINARY)
 
-run: build check-pg-password  ## Build and run covid19-scraper with gcloud database, see make gcloud-proxy
-	./$(BINARY) --conn="postgres://postgres@localhost:5555/covid19db?sslmode=disable"
-
-run-local: build  ## Build and run covid19-scraper with local database
-	./$(BINARY) --conn="postgres://postgres:postgres@localhost:5432/?sslmode=disable"
+run: build  ## Build and run covid19-scraper with local database
+	./$(BINARY) --conn="postgres://postgres:postgres@localhost/?sslmode=disable"
 
 clean::
 	rm -f $(BINARY)
 
-.PHONY: build run run-local
+.PHONY: build run
 
 
-# -- Lint ----------------------------------------------------------------------
+# --- Lint
 
 lint:  ## lint the source code
 	golangci-lint run
@@ -36,7 +31,7 @@ lint:  ## lint the source code
 .PHONY: lint
 
 
-# -- Test ----------------------------------------------------------------------
+# --- Test
 
 COVERFILE = coverage.out
 COVERAGE = 43
@@ -59,33 +54,77 @@ clean::
 CHECK_COVERAGE = awk -F '[ \t%]+' '/^total:/ {print; if ($$3 < $(COVERAGE)) exit 1}'
 FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_NORMAL)'; exit 1; }
 
-.PHONY: test check-coverage cover
+.PHONY: test test-all check-coverage cover
 
-# -- DB ------------------------------------------------------------------------
 
-GCLOUD_PORT = 5555
+# --- DB
 
-postgres:  ## Start Postgres docker container on port 5432
+postgres:  ## Start Postgres docker container and expose default port 5432
 	docker run --rm --name postgres -e POSTGRES_PASSWORD=postgres -p5432:5432 postgres:11.7
 
 psql:  ## Connect to local postgres docker container
 	docker exec -it postgres psql -U postgres
 
-gcloud-proxy: ## Start Google cloud proxy connected to google cloud database
-	cloud_sql_proxy -instances=covid19-sars-cov-2:us-central1:covid19=tcp:$(GCLOUD_PORT)
+.PHONY:   postgres psql
 
-gcloud-psql:  check-pg-password ## Connect to gcloud postgres database via gcloud-proxy
+
+# --- GCP run scraper and access db
+
+GCP_DBNAME = covid19db
+GCP_DBHOST = covid19-sars-cov-2:us-central1:covid19
+GCP_DBUSER = postgres
+GCP_DBPORT = 5555
+
+gcp-proxy: ## Start Google cloud proxy connected to google cloud database
+	cloud_sql_proxy -instances=$(GCP_DBHOST)=tcp:$(GCP_DBPORT)
+
+gcp-psql: check-pg-password ## Connect to gcloud postgres database via gcloud-proxy
 	docker exec -it -e PGPASSWORD=$(PGPASSWORD) postgres psql \
-		-h docker.for.mac.localhost -U postgres -d covid19db -p $(GCLOUD_PORT)
+		-h docker.for.mac.localhost -U $(GCP_DBUSER) -d $(GCP_DBNAME) -p $(GCP_DBPORT)
+
+gcp-run: build check-pg-password  ## Build and run covid19-scraper with gcloud database, see make gcloud-proxy
+	./$(BINARY) --conn="postgres://$(GCP_DBUSER)@localhost:$(GCP_DBPORT)/$(GCP_DBNAME)?sslmode=disable"
 
 check-pg-password:
 ifeq ($(PGPASSWORD),)
-	$(error PGPASSWORD environement varaible not set)
+	$(error PGPASSWORD environment variable not set)
 endif
 
-.PHONY: check-pg-password gcloud-proxy gcloud-psql postgres psql
+.PHONY: check-pg-password gcp-proxy gcp-psql gcp-run
 
-# --- Utilities ---------------------------------------------------------------
+
+# --- GCP deploy
+
+GCP_RUNTIME = go113
+GCP_ENVVARS = PGPASSWORD=$(PGPASSWORD),PGUSER=$(GCP_DBUSER),PGDATABASE=$(GCP_DBNAME),PGHOST=/cloudsql/$(GCP_DBHOST)
+
+deploy:	deploy-http deploy-event deploy-scheduler ## deploy covid19-scraper to GCP
+
+deploy-http: build check-pg-password
+	gcloud functions deploy Covid19HTTP \
+		--runtime $(GCP_RUNTIME) \
+		--trigger-http \
+		--allow-unauthenticated \
+		--set-env-vars=$(GCP_ENVVARS)
+
+deploy-event: build check-pg-password
+	gcloud functions deploy Covid19Event \
+		--runtime $(GCP_RUNTIME) \
+		--trigger-topic=schedule \
+		--allow-unauthenticated \
+		--set-env-vars=$(GCP_ENVVARS)
+
+deploy-scheduler: # only once on initial set up
+	-gcloud scheduler jobs create pubsub covid19-scrape-job
+		--schedule="0 */12 * * *" \
+		--topic="schedule" \
+		--message-body="go scrape" \
+		--description="daily covid19 data scrape trigger"
+
+.PHONY: deploy deploy-event deploy-http deploy-scheduler
+
+
+# --- Utilities
 
 COLOUR_NORMAL = $(shell tput sgr0 2>/dev/null)
 COLOUR_RED    = $(shell tput setaf 1 2>/dev/null)

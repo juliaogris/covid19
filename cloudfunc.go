@@ -9,19 +9,20 @@ import (
 	"github.com/juliaogris/covid19/pkg/covid19"
 )
 
-const conn = "?????"
+const conn = "" // connection string parsed from envvars by lib/pq
 
 func Covid19HTTP(w http.ResponseWriter, r *http.Request) {
 	t, err := covid19.ScrapeWiki(covid19.WikiURL, conn)
 	if err != nil {
 		log.Println("Covid19HTTP ERROR:", err)
+		fmt.Fprintln(w, "Error", err)
 		return
 	}
 	log.Println("Covid19HTTP: successfully added", len(t.Cells), "rows.")
-	fmt.Fprintln(w, "successfully added", len(t.Cells), "rows.")
+	fmt.Fprintln(w, "Successfully added", len(t.Cells), "rows.")
 }
 
-func ConvidEvent(ctx context.Context, _ interface{}) error {
+func Covid19Event(ctx context.Context, _ interface{}) error {
 	t, err := covid19.ScrapeWiki(covid19.WikiURL, conn)
 	if err != nil {
 		log.Println("ConvidEvent ERROR:", err)
