@@ -26,6 +26,7 @@ func newScraper(url string) *table.Scraper {
 		HeaderRowCount:  2,
 		FooterRowCount:  2,
 		TargetTableName: "entries",
+		ContinueOnError: true,
 	}
 }
 

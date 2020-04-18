@@ -98,7 +98,7 @@ endif
 GCP_RUNTIME = go113
 GCP_ENVVARS = PGPASSWORD=$(PGPASSWORD),PGUSER=$(GCP_DBUSER),PGDATABASE=$(GCP_DBNAME),PGHOST=/cloudsql/$(GCP_DBHOST)
 
-deploy:	deploy-http deploy-event deploy-scheduler ## deploy covid19-scraper to GCP
+deploy:	deploy-http deploy-event ## deploy covid19-scraper to GCP
 
 deploy-http: build check-pg-password
 	gcloud functions deploy Covid19HTTP \
@@ -114,7 +114,7 @@ deploy-event: build check-pg-password
 		--allow-unauthenticated \
 		--set-env-vars=$(GCP_ENVVARS)
 
-deploy-scheduler: # only once on initial set up
+deploy-scheduler: ## deploy scheduler, one time only task
 	-gcloud scheduler jobs create pubsub covid19-scrape-job
 		--schedule="0 */12 * * *" \
 		--topic="schedule" \

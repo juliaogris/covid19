@@ -14,15 +14,17 @@ import (
 )
 
 type Scraper struct {
-	URL         string
-	CSSSelector string
+	URL               string
+	CSSSelector       string
+	SkipTrCSSSelector string
 
 	ColumnDefs []ColumnDef
 
-	HeaderRowIndex int
-	HeaderColNames []string
-	HeaderRowCount int
-	FooterRowCount int
+	HeaderRowIndex  int
+	HeaderColNames  []string
+	HeaderRowCount  int
+	FooterRowCount  int
+	ContinueOnError bool
 
 	TargetTableName string
 	TargetColNames  []string // must match ColumnDefs[i].TargetName; for rearranging
@@ -79,7 +81,7 @@ func (s *Scraper) scrapeFromReader(r io.Reader) (*Table, error) {
 		return nil, err
 	}
 	bodyRows := rows[s.HeaderRowCount : len(rows)-s.FooterRowCount]
-	table, err := parseTableBody(bodyRows, s.ColumnDefs)
+	table, err := parseTableBody(bodyRows, s.ColumnDefs, s.ContinueOnError)
 	if err != nil {
 		return nil, err
 	}
@@ -129,15 +131,17 @@ func vaildateTableHeader(rows [][]string, colNames []string, rowIndex int) error
 	return nil
 }
 
-func parseTableBody(rows [][]string, colDefs []ColumnDef) (*Table, error) {
-	cells := make([][]interface{}, len(rows))
-	targetColCnt := getTargetColCnt(colDefs)
-	var err error
-	for i, row := range rows {
-		cells[i], err = parseRow(row, colDefs, targetColCnt)
+func parseTableBody(rows [][]string, colDefs []ColumnDef, continueOnErr bool) (*Table, error) {
+	cells := make([][]interface{}, 0, len(rows))
+	for _, row := range rows {
+		row, err := parseRow(row, colDefs)
 		if err != nil {
+			if continueOnErr {
+				continue
+			}
 			return nil, err
 		}
+		cells = append(cells, row)
 	}
 	columns := getTargetColumns(colDefs)
 	return &Table{Columns: columns, Cells: cells}, nil
@@ -164,12 +168,12 @@ func getTargetColumns(colDefs []ColumnDef) []Column {
 	return cols
 }
 
-func parseRow(row []string, colDefs []ColumnDef, targetColCnt int) ([]interface{}, error) {
+func parseRow(row []string, colDefs []ColumnDef) ([]interface{}, error) {
 	if len(row) != len(colDefs) {
 		return nil, fmt.Errorf("expected %d data cells, got %d (%#v)", len(colDefs), len(row), row)
 	}
 	var err error
-	result := make([]interface{}, targetColCnt)
+	result := make([]interface{}, getTargetColCnt(colDefs))
 	j := 0
 	for i, colDef := range colDefs {
 		if colDef.Skip {

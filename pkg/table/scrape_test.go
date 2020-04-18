@@ -10,6 +10,7 @@ import (
 )
 
 const wikiFile = "wikipedia_2020-04-05.htm"
+const wikiFile2 = "wikipedia_2020-04-18.htm"
 const mapFile = "coronavirus-map-2020-03-22.html"
 
 var wikiZeroValues = []string{"-", "—", "–"}
@@ -32,6 +33,12 @@ func wikiScraper() *Scraper {
 		FooterRowCount:  2,
 		TargetTableName: "wiki_entries",
 	}
+}
+
+func wikiScraper2() *Scraper {
+	s := wikiScraper()
+	s.ContinueOnError = true
+	return s
 }
 
 func mapScraper() *Scraper {
@@ -73,6 +80,13 @@ func TestScrapeTable(t *testing.T) {
 			wantRowCnt:   223,
 			wantColNames: []string{"country", "cases", "deaths", "recoveries"},
 			wantCells0:   []interface{}{"United States", 311616, 8489, 14943},
+		},
+		"wiki2": {
+			inputFile:    wikiFile2,
+			scraper:      wikiScraper2(),
+			wantRowCnt:   232,
+			wantColNames: []string{"country", "cases", "deaths", "recoveries"},
+			wantCells0:   []interface{}{"United States", 712184, 32823, 59532},
 		},
 		"map": {
 			inputFile:    mapFile,

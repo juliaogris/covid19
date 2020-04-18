@@ -11,7 +11,7 @@ import (
 type Table struct {
 	Name    string
 	Columns []Column
-	Cells   [][]interface{} // string, int64, float32
+	Cells   [][]interface{} // string, int64, float32 TODO: better: Rows []Row
 }
 
 type Column struct {
