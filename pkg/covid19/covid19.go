@@ -22,7 +22,7 @@ func newScraper(url string) *table.Scraper {
 			{Skip: true},
 		},
 		HeaderRowIndex:  0,
-		HeaderColNames:  []string{"countries", "cases", "deaths", "recov", "ref"},
+		HeaderColNames:  []string{"locations", "cases", "deaths", "recov", "ref"},
 		HeaderRowCount:  2,
 		FooterRowCount:  2,
 		TargetTableName: "entries",

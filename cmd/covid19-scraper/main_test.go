@@ -37,5 +37,5 @@ func TestMain(t *testing.T) {
 	w.Close()
 	out, _ := ioutil.ReadAll(r)
 
-	require.Equal(t, "Successfully added 223 rows.\n", string(out))
+	require.Equal(t, "Successfully added 220 rows.\n", string(out))
 }
